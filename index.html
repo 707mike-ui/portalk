@@ -1,0 +1,115 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Kathy Dirksen — Family Portal</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Georgia, serif;
+    background: #f5f0e8; color: #222; line-height: 1.5;
+  }
+  a { color: #5a3e1b; text-decoration: none; transition: 0.2s; }
+  header {
+    background: #3b2a1a; color: #f5f0e8; padding: 1rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: Georgia, serif; line-height: 1;
+  }
+  header h1 { font-size: 1rem; line-height: 1; margin: 0; padding: 0; }
+  .container { max-width: 800px; margin: 0 auto; padding: 16px; }
+
+  .nav-note {
+    font-size: .93rem; color: #6b5a42; text-align: center;
+    margin: 10px auto 14px; padding: 0 8px;
+  }
+
+  .entry-card {
+    background: #3b2a1a; border: 2px solid #c8a96e; border-radius: 12px;
+    padding: 22px 20px; margin: 18px auto; text-align: center;
+    box-shadow: 0 3px 8px rgba(0,0,0,.15);
+  }
+  .entry-card p {
+    color: #f5f0e8; font-size: 1.4rem; font-weight: bold;
+    margin: 0; line-height: 1.2;
+  }
+  .entry-card .sub {
+    color: #c8a96e; font-size: .88rem; font-weight: normal;
+    margin-top: 4px;
+  }
+
+  .desc { 
+    background:#fff; border:1px solid #ddd; border-radius:8px;
+    padding:16px 20px; margin:14px auto; box-shadow:0 2px 4px rgba(0,0,0,.05);
+    text-align: center;
+  }
+  .desc p { margin: 0; }
+  .desc strong { color:#3b2a1a; }
+
+  .report-link {
+    display: block; background: #3b2a1a; border: 2px solid #c8a96e;
+    border-radius: 12px; padding: 10px; margin: 18px auto;
+    box-shadow: 0 3px 8px rgba(0,0,0,.15);
+  }
+  .report-link .inner {
+    background: #fff; border-radius: 8px; padding: 16px;
+    text-align: center;
+  }
+  
+  /* Shared typography rules ensuring 1:1 match */
+  .report-link .msg,
+  .desc .msg {
+    display: inline-block;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Georgia, serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #5a3e1b;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  .report-link .small {
+    display: block; font-size: .85rem; font-weight: normal; color: #777; margin-top: 6px;
+  }
+
+  .card-link { display: block; color: inherit; text-decoration: none; }
+
+  @media (max-width:500px) {
+    .container { padding: 10px; }
+    .entry-card p { font-size: 1.2rem; }
+    .desc { padding: 14px 14px; }
+    header { padding: 0.75rem 1rem; }
+  }
+</style>
+</head>
+<body>
+<script src="header-p.js"></script>
+<script>sessionStorage.removeItem("portalFocusId");</script>
+
+<div class="container">
+  <div class="desc">
+    <span class="msg"><p><br>The <i><b>report an error</b></i> link in the box above autostarts an email to me about ....whatever.</p><p><br>Everything here is intended to trace your biological relatives back to their arrival on this continent and to connect relatives resulting from marriages in the <a href="html/412800183193.html" style="text-decoration: underline;">Port</a>, <a href="html/412800183487.html" style="text-decoration: underline;Dirksen</a>, <a href="html/292792337034.html" style="text-decoration: underline;">Robinson</a> and <a href="html/292792337141.html" style="text-decoration: underline;">Hie</a> families.<p><br>This is a working family record, not a certified genealogical proof. -md</p></span>
+  </div>
+
+  <a href="html/252802692100.html" class="card-link">
+    <div class="entry-card">
+      <p>Start Here — Kathy's Family →</p>
+      <p class="sub"></p>
+    </div>
+  </a>
+
+</div>
+
+<script>
+(function(){
+  var link = document.getElementById('reportLink');
+  var subject = "Portal note: " + document.title;
+  var body = "Page: " + window.location.href + "\n\nWhat I noticed:\n";
+  link.href = "mailto:707mike@gmail.com?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+})();
+</script>
+</body>
+</html>
