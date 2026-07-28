@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cavallaro — Dirksen / Hie Family Tree</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; }
+body { font-family: Georgia, serif; background: #f5f0e8; color: #222; }
+a { color: #5a3e1b; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Header ── */
+header {
+  background: #3b2a1a; color: #f5f0e8;
+  padding: 1rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: Georgia, serif;
+}
+
+/* ── Layout ── */
+.container { max-width: 980px; margin: 0 auto; padding: 28px 20px 48px; }
+
+h2 {
+  font-size: 1.5rem;
+  color: #3b2a1a;
+  border-bottom: 2px solid #c8a96e;
+  padding-bottom: 5px;
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+/* ── Search hero ── */
+.search-hero {
+  background: #fff;
+  border: 1px solid #d6c9a8;
+  border-radius: 10px;
+  padding: 22px 24px 18px;
+  margin-bottom: 28px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.search-hero label {
+  display: block;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7a5c30;
+  margin-bottom: 8px;
+}
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap input {
+  width: 100%;
+  padding: 11px 44px 11px 14px;
+  font-size: 1.15rem;
+  font-family: Georgia, serif;
+  border: 2px solid #c8a96e;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: #222;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-wrap input:focus { border-color: #8a5e28; }
+.search-wrap input::placeholder { color: #b0956a; font-style: italic; }
+#clear-btn {
+  position: absolute; right: 12px;
+  background: none; border: none; cursor: pointer;
+  font-size: 1.3rem; color: #aaa; line-height: 1;
+  display: none;
+  padding: 0 2px;
+}
+#clear-btn:hover { color: #5a3e1b; }
+.search-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 10px; min-height: 20px;
+}
+#result-count {
+  font-size: 0.85rem; color: #7a5c30;
+}
+#enter-hint {
+  font-size: 0.82rem; color: #9a7a48;
+  display: none;
+}
+#enter-hint kbd {
+  font-family: monospace; background: #f0e8d4;
+  border: 1px solid #c8a96e; border-radius: 3px;
+  padding: 1px 5px; font-size: 0.78rem;
+}
+
+/* ── Name list ── */
+.people-list { display:grid; grid-template-columns:repeat(3,1fr); gap:0 28px; }
+.people-list li {
+  list-style: none;
+  padding: 5px 0 4px;
+  border-bottom: 1px dotted #ccc;
+  line-height: 1.35;
+}
+.people-list li a { font-size: 1.25rem; font-weight: bold; display: block; padding: 6px 0; text-align: center; }
+.people-list li small { display: inline; font-size: 0.85em; font-weight: bold; color: inherit; margin-left: 6px; }
+
+/* highlight matched text */
+mark {
+  background: #f7e5a0;
+  color: #3b2a1a;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* single-result spotlight */
+.people-list li.sole-match {
+  background: #fffbe8;
+  border-radius: 5px;
+  padding: 8px 10px;
+  border: 1px solid #c8a96e;
+  margin-bottom: 4px;
+}
+.people-list li.sole-match a {
+  font-size: 1.08rem;
+  font-weight: bold;
+}
+
+/* no results message */
+#no-results {
+  display: none;
+  text-align: center;
+  padding: 32px 0;
+  color: #7a5c30;
+  font-style: italic;
+  font-size: 1rem;
+}
+
+/* shared CSS from individual pages (lightbox, gallery, vitals) */
+.vitals { background:#fff; border:1px solid #ddd; border-radius:6px; padding:16px; margin-bottom:16px; }
+.vitals p { margin: 4px 0; }
+.label { font-weight:bold; color:#5a3e1b; min-width:80px; display:inline-block; }
+.gallery { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+.gallery figure { background:#fff; border:1px solid #ddd; border-radius:6px; padding:8px; max-width:220px; text-align:center; }
+.gallery img { max-width:200px; max-height:200px; object-fit:contain; display:block; margin:0 auto 6px; cursor:pointer; }
+.gallery figcaption { font-size:0.8rem; color:#555; }
+#lb { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:9999; align-items:center; justify-content:center; flex-direction:column; }
+#lb.open { display:flex; }
+#lb-img { max-width:90vw; max-height:82vh; object-fit:contain; border-radius:4px; box-shadow:0 4px 32px rgba(0,0,0,0.6); }
+#lb-cap { color:#eee; margin-top:12px; font-size:0.95rem; max-width:90vw; text-align:center; }
+#lb-close { position:absolute; top:14px; right:22px; font-size:2.4rem; color:#fff; cursor:pointer; background:none; border:none; line-height:1; }
+.family-box { background:#fff; border:1px solid #ddd; border-radius:6px; padding:14px; margin-bottom:12px; }
+.family-box p { margin: 3px 0; }
+.tag { display:inline-block; background:#e8d9b5; border-radius:3px; font-size:0.75rem; padding:1px 6px; margin-right:4px; color:#5a3e1b; }
+
+@media(max-width:620px){
+  .people-list { grid-template-columns: 1fr; }
+  .gallery figure { max-width: 160px; }
+  .search-hero { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<script src="header-s.js"></script>
+<script src="../../data.js"></script>
+
+<div class="container">
+
+  <h2 id="people-heading"></h2>
+
+  <ul class="people-list" id="plist"></ul>
+
+  <div id="no-results">No matching name found. Try fewer letters.</div>
+
+</div>
+
+<div id="lb">
+  <button id="lb-close">&times;</button>
+  <img id="lb-img" src="" alt="">
+  <div id="lb-cap"></div>
+</div>
+
+<script>
+(function () {
+  // Build this surname's person list from data.js (single-source)
+  var SURNAME = 'Cavallaro';
+  var plist = document.getElementById('plist');
+  var people = [];
+
+  Object.keys(TREE.individuals).forEach(function (id) {
+    var rec = TREE.individuals[id];
+    if (!rec.page) return;
+    var nameParts = rec.name.trim().split(' ');
+    if (nameParts.length < 2) return;
+    var surname = nameParts[nameParts.length - 1];
+    if (surname !== SURNAME) return;
+    var given = nameParts.slice(0, -1).join(' ');
+    people.push({
+      given: given,
+      name: rec.name,
+      byear: rec.byear || '',
+      page: rec.page.replace(/^html\//, '../')
+    });
+  });
+
+  function sortByYear(a, b) {
+    var ay = a.byear ? parseInt(a.byear, 10) : -Infinity;
+    var by = b.byear ? parseInt(b.byear, 10) : -Infinity;
+    if (ay !== by) return by - ay;
+    return a.given.localeCompare(b.given);
+  }
+
+  function renderList() {
+    var isMobile = window.innerWidth <= 620;
+    var sorted = people.slice().sort(sortByYear);
+
+    if (isMobile) {
+      plist.style.gridAutoFlow = '';
+      plist.style.gridTemplateRows = '';
+    } else {
+      var rows = Math.max(1, Math.ceil(sorted.length / 3));
+      plist.style.gridAutoFlow = 'column';
+      plist.style.gridTemplateRows = 'repeat(' + rows + ', auto)';
+    }
+
+    plist.innerHTML = '';
+    sorted.forEach(function (p) {
+      var li = document.createElement('li');
+      var dataName = p.name.replace(/[^A-Za-z]+/g, '_').replace(/^_+|_+$/g, '');
+      li.setAttribute('data-name', dataName);
+
+      var a = document.createElement('a');
+      a.href = p.page;
+      a.innerHTML = p.name + (p.byear ? ' <small>' + p.byear + '</small>' : '');
+      li.appendChild(a);
+
+      plist.appendChild(li);
+    });
+  }
+
+  renderList();
+
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderList, 150);
+  });
+
+  var heading  = document.getElementById('people-heading');
+
+  heading.textContent = 'Adrian';
+
+  var lb    = document.getElementById('lb');
+  var lbImg = document.getElementById('lb-img');
+  var lbCap = document.getElementById('lb-cap');
+  document.querySelectorAll('.gallery img').forEach(function (img) {
+    img.addEventListener('click', function () {
+      lbImg.src = img.src; lbImg.alt = img.alt;
+      lbCap.textContent = img.alt;
+      lb.classList.add('open');
+    });
+  });
+  document.getElementById('lb-close').addEventListener('click', function () { lb.classList.remove('open'); });
+  lb.addEventListener('click', function (e) { if (e.target === lb) lb.classList.remove('open'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') lb.classList.remove('open'); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ancestor Fan Chart — Family Tree</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { margin:0; padding:0; }
+body { font-family:Georgia,serif; background:#f5f0e8; color:#222; margin:0; overflow:hidden; }
+a { color:#5a3e1b; text-decoration:none; }
+a:hover { text-decoration:underline; }
+
+header { background:#3b2a1a; color:#f5f0e8; padding:1rem 1.5rem;
+         display:flex; align-items:center; justify-content:space-between;
+         font-family:Georgia,serif; gap:12px; flex-wrap:wrap; }
+
+            gap:16px; flex-wrap:wrap; justify-content:center; }
+          border:1px solid #ccc; border-radius:4px; }
+               border:1px solid #ccc; border-top:none; border-radius:0 0 4px 4px;
+               max-height:200px; overflow-y:auto; z-index:20; display:none; }
+
+#fan-wrap { display:flex; justify-content:center; align-items:center; flex:1;
+            padding:8px 8px 4px 8px; min-height:0; }
+#fan-svg  { display:block; width:min(1280px,calc(100vw - 16px),calc(100vh - 120px)); height:min(1280px,calc(100vw - 16px),calc(100vh - 120px)); }
+
+#pan-hint { position:fixed; bottom:18px; right:18px; background:rgba(59,42,26,0.82); color:#f5f0e8; font-family:Georgia,serif; font-size:13px; padding:7px 13px; border-radius:20px; pointer-events:auto; cursor:pointer; opacity:1; transition:opacity 0.6s; z-index:50; line-height:1.5; text-align:center; user-select:none; }
+#pan-hint.hidden { opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<script src="header-p.js"></script>
+
+<div id="pan-hint" title="Click to dismiss">🖱 Scroll to zoom · Drag to pan<br>📱 Pinch to zoom · Swipe to pan</div>
+
+
+<div id="fan-wrap">
+  <svg id="fan-svg" viewBox="0 0 1280 1280"></svg>
+</div>
+
+
+<script src="data.js"></script>
+<script>
+(function () {
+
+  let focusId = null;
+  let numGens = 3;
+
+  // ── Data helpers ────────────────────────────────────────────────────────────
+  function indi(id) { return id ? TREE.individuals[id] : null; }
+  function fam(id)  { return id ? TREE.families[id]    : null; }
+
+  function fatherOf(id) {
+    const p = indi(id); if (!p || !p.famc) return null;
+    const f = fam(p.famc); return f ? f.husb : null;
+  }
+  function motherOf(id) {
+    const p = indi(id); if (!p || !p.famc) return null;
+    const f = fam(p.famc); return f ? f.wife : null;
+  }
+
+  function shortName(id) {
+    const p = indi(id); if (!p) return 'Unknown';
+    const parts = p.name.split(' ').filter(Boolean).filter(w => !/^GM[\d#]/i.test(w));
+    if (parts.length === 1) return parts[0];
+    return parts[0] + ' ' + parts[parts.length - 1];
+  }
+
+  function cleanName(id) {
+    const p = indi(id); if (!p) return 'Unknown';
+    return p.name.split(' ').filter(w => !/^GM[\d#]/i.test(w)).join(' ');
+  }
+
+  function lifespan(id) {
+    const p = indi(id); if (!p) return '';
+    return p.byear ? String(p.byear) : '';
+  }
+
+  // ── Root person ─────────────────────────────────────────────────────────────
+  function startId() {
+    const m = window.location.search.match(/[?&]id=([^&]+)/);
+    if (m && TREE.individuals[m[1]]) return m[1];
+    const saved = sessionStorage.getItem('portalFocusId');
+    if (saved && TREE.individuals[saved]) return saved;
+    return '252802692100';
+  }
+
+  // ── Build ancestor grid ─────────────────────────────────────────────────────
+  function buildGrid(rootId, maxG) {
+    const grid = [[rootId]];
+    for (let g = 1; g <= maxG; g++) {
+      grid[g] = [];
+      grid[g - 1].forEach(id => {
+        grid[g].push(id ? fatherOf(id) : null);
+        grid[g].push(id ? motherOf(id) : null);
+      });
+    }
+    return grid;
+  }
+
+  // ── Colour helpers ──────────────────────────────────────────────────────────
+  function blendHex(c1, c2, t) {
+    const h = function(s) { return parseInt(s, 16); };
+    const r = Math.round(h(c1.slice(1,3)) + (h(c2.slice(1,3)) - h(c1.slice(1,3))) * t);
+    const g = Math.round(h(c1.slice(3,5)) + (h(c2.slice(3,5)) - h(c1.slice(3,5))) * t);
+    const b = Math.round(h(c1.slice(5,7)) + (h(c2.slice(5,7)) - h(c1.slice(5,7))) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  function arcFill(id, g, maxG) {
+    if (!id) return '#e0e0e0';
+    const p = indi(id); if (!p) return '#e0e0e0';
+    const t = maxG > 1 ? Math.min((g - 1) / (maxG - 1), 1) : 0;
+    if (p.sex === 'M') return blendHex('#a8916c', '#ddd0bc', t);
+    if (p.sex === 'F') return blendHex('#c9ad7f', '#ede2cf', t);
+    return '#c8d8b8';
+  }
+
+  function ns(tag, attrs) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
+  }
+
+  // ── Draw ────────────────────────────────────────────────────────────────────
+  function draw() {
+    const MAX_GEN = numGens;
+    const rootId  = focusId;
+    const grid    = buildGrid(rootId, MAX_GEN);
+
+    // FIX: Restored original dynamic generation checker to prevent divide-by-zero crashes
+    let maxGen = 0;
+    for (let g = 1; g <= MAX_GEN; g++) {
+      if (grid[g].some(id => id !== null)) maxGen = g;
+    }
+    if (maxGen === 0) maxGen = 1;
+
+    const SIZE     = 1280;
+    const cx       = SIZE / 2;
+    const cy       = SIZE / 2;
+    const CENTER_R = 67;                     
+    const OUTER_R  = SIZE / 2 - 12;
+    const RING_W   = (OUTER_R - CENTER_R) / maxGen;
+    const START    = -Math.PI / 2;
+
+    const svg = document.getElementById('fan-svg');
+    svg.innerHTML = '';
+
+    function arcPath(r1, r2, a1, a2) {
+      const large = (a2 - a1 > Math.PI) ? 1 : 0;
+      const c1 = Math.cos(a1), s1 = Math.sin(a1);
+      const c2 = Math.cos(a2), s2 = Math.sin(a2);
+      return [
+        "M", (cx + r1*c1), " ", (cy + r1*s1),
+        "L", (cx + r2*c1), " ", (cy + r2*s1),
+        "A", r2, " ", r2, " 0 ", large, " 1 ", (cx + r2*c2), " ", (cy + r2*s2),
+        "L", (cx + r1*c2), " ", (cy + r1*s2),
+        "A", r1, " ", r1, " 0 ", large, " 0 ", (cx + r1*c1), " ", (cy + r1*s1), "Z"
+      ].join('');
+    }
+
+    // ── Root circle ───────────────────────────────────────────────────────────
+    const rootCircle = ns('circle', {
+      cx, cy, r: CENTER_R,
+      fill: '#fef3d0', stroke: '#5a3e1b', 'stroke-width': 2.5
+    });
+    rootCircle.style.cursor = 'pointer';
+    rootCircle.addEventListener('click', () => {
+      if (window._fanDragged) return;
+      const p = indi(rootId);
+      if (p && p.page) { sessionStorage.setItem('portalFocusId', rootId); window.location.href = p.page; }
+    });
+    svg.appendChild(rootCircle);
+
+    const rootP = indi(rootId);
+    if (rootP) {
+      const ls = lifespan(rootId);
+      const rg = ns('g', {});
+      rg.style.cursor = 'pointer';
+      rg.addEventListener('click', () => {
+        if (window._fanDragged) return;
+        const p = indi(rootId);
+        if (p && p.page) { sessionStorage.setItem('portalFocusId', rootId); window.location.href = p.page; }
+      });
+
+      const nameParts = shortName(rootId).split(' ');
+      const nameLine1 = nameParts[0];
+      const nameLine2 = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+      const nameEl = ns('text', {
+        x: cx, y: cy - 16,
+        'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-size': 25, 'font-family': 'Georgia,serif',
+        'font-weight': 'bold', fill: '#1a0a00'
+      });
+      const nameLine1El = ns('tspan', { x: cx, dy: 0 });
+      nameLine1El.textContent = nameLine1;
+      nameEl.appendChild(nameLine1El);
+      if (nameLine2) {
+        const nameLine2El = ns('tspan', { x: cx, dy: 26 });
+        nameLine2El.textContent = nameLine2;
+        nameEl.appendChild(nameLine2El);
+      }
+      rg.appendChild(nameEl);
+
+      if (ls) {
+        const lsEl = ns('text', {
+          x: cx, y: cy + 35,
+          'text-anchor': 'middle', 'dominant-baseline': 'middle',
+          'font-size': 20, 'font-family': 'Georgia,serif', fill: '#5a3e1b'
+        });
+        lsEl.textContent = ls;
+        rg.appendChild(lsEl);
+      }
+      svg.appendChild(rg);
+    }
+
+    const g1lbl = ns('text', {
+      x: cx, y: cy + CENTER_R - 123,
+      'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      'font-size': 9, 'font-family': 'Georgia,serif',
+      fill: '#888', 'pointer-events': 'none'
+    });
+    g1lbl.textContent = 'G1';
+    svg.appendChild(g1lbl);
+
+    // ── Generation rings ──────────────────────────────────────────────────────
+    for (let g = 1; g <= maxGen; g++) {
+      const r1    = CENTER_R + (g - 1) * RING_W;
+      const r2    = CENTER_R + g * RING_W;
+      const total = Math.pow(2, g);
+      const step  = (2 * Math.PI) / total;
+      const midR  = (r1 + r2) / 2;
+
+      const fontSize  = Math.min(26, RING_W * 0.55); 
+      const showText  = RING_W > 16;
+      const showDates = RING_W > 30;
+
+      for (let s = 0; s < total; s++) {
+        const id = grid[g][s];
+        const a1 = START + s * step;
+        const a2 = START + (s + 1) * step;
+        const midA   = (a1 + a2) / 2;
+        const arcLen = step * midR;
+
+        const path = ns('path', {
+          d: arcPath(r1, r2, a1, a2),
+          fill: arcFill(id, g, maxGen),
+          stroke: '#fff',
+          'stroke-width': g <= 3 ? 1.5 : 0.8
+        });
+
+        if (id) {
+          const tip = ns('title', {});
+          tip.textContent = cleanName(id) + (lifespan(id) ? '  ' + lifespan(id) : '');
+          path.appendChild(tip);
+          path.style.cursor = 'pointer';
+          const href = indi(id).page;
+          path.addEventListener('click', () => { if (window._fanDragged) return; sessionStorage.setItem('portalFocusId', id); window.location.href = href; });
+        }
+        svg.appendChild(path);
+
+        if (id && showText && arcLen > fontSize * 3.2) {
+          const tx = cx + midR * Math.cos(midA);
+          const ty = cy + midR * Math.sin(midA);
+          const ls = lifespan(id);
+
+          // FIX: Eradicated structural conditions completely. Used linear, safe, standard execution branches.
+          if (g === 1) {
+            const tg = ns('g', {
+              transform: 'translate(' + tx + ',' + ty + ')',
+              'pointer-events': 'none'
+            });
+
+            const pData = indi(id);
+            if (pData && pData.name) {
+              const rawParts = pData.name.split(' ').filter(Boolean).filter(w => !/^GM[\d#]/i.test(w));
+              const lineH = fontSize * 1.15;
+              const yOffsetShift = ls ? 17 : (lineH / 2);
+
+              const givenEl = ns('text', {
+                x: 0, y: -lineH + yOffsetShift,
+                'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                'font-size': fontSize, 'font-family': 'Georgia,serif',
+                'font-weight': 'bold', fill: '#111'
+              });
+              givenEl.textContent = rawParts[0] || 'Unknown';
+              tg.appendChild(givenEl);
+
+              const surnameEl = ns('text', {
+                x: 0, y: 0 + yOffsetShift,
+                'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                'font-size': fontSize, 'font-family': 'Georgia,serif',
+                'font-weight': 'bold', fill: '#111'
+              });
+              surnameEl.textContent = rawParts.length > 1 ? rawParts[rawParts.length - 1] : '';
+              tg.appendChild(surnameEl);
+
+              if (ls) {
+                const yearEl = ns('text', {
+                  x: 0, y: lineH * 1.4,
+                  'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                  'font-size': Math.round(fontSize * 0.85),
+                  'font-family': 'Georgia,serif', fill: '#483216'
+                });
+                yearEl.textContent = ls;
+                tg.appendChild(yearEl);
+              }
+            }
+            svg.appendChild(tg);
+          } 
+          else if (g === maxGen) {
+            let rot = midA * 180 / Math.PI + 90;
+            if (Math.sin(midA) > 0) rot -= 180;
+
+            const tg = ns('g', {
+              transform: 'translate(' + tx + ',' + ty + ') rotate(' + rot + ')',
+              'pointer-events': 'none'
+            });
+
+            const doYear = showDates && ls && arcLen > fontSize * 5.5;
+            const nameOffY = doYear ? -fontSize * 0.55 : 0;
+            const p6 = indi(id);
+            if (p6 && p6.name) {
+              const raw = p6.name.split(' ').filter(Boolean).filter(w => !/^GM[\d#]/i.test(w));
+              const lines = raw.length === 1 ? [raw[0]] : [raw[0], raw[raw.length - 1]];
+              const lineH = fontSize * 1.15;
+              const topY  = nameOffY - (lines.length - 1) * lineH / 2;
+              
+              lines.forEach((word, i) => {
+                const wEl = ns('text', {
+                  x: 0, y: topY + i * lineH,
+                  'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                  'font-size': fontSize, 'font-family': 'Georgia,serif',
+                  'font-weight': 'bold', fill: '#111'
+                });
+                wEl.textContent = word;
+                tg.appendChild(wEl);
+              });
+            }
+
+            if (doYear) {
+              const yearEl = ns('text', {
+                x: 0, y: fontSize * 1.3,
+                'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                'font-size': Math.round(fontSize * 0.85),
+                'font-family': 'Georgia,serif', fill: '#483216'
+              });
+              yearEl.textContent = ls;
+              tg.appendChild(yearEl);
+            }
+            svg.appendChild(tg);
+          } 
+          else {
+            let rot = midA * 180 / Math.PI + 90;
+            if (Math.sin(midA) > 0) rot -= 180;
+
+            const tg = ns('g', {
+              transform: 'translate(' + tx + ',' + ty + ') rotate(' + rot + ')',
+              'pointer-events': 'none'
+            });
+
+            const doYear = showDates && ls && arcLen > fontSize * 5.5;
+            const nameOffY = doYear ? -fontSize * 0.55 : 0;
+
+            const pElse = indi(id);
+            if (pElse && pElse.name) {
+              const raw = pElse.name.split(' ').filter(Boolean).filter(w => !/^GM[\d#]/i.test(w));
+              const lines = raw.length === 1 ? [raw[0]] : [raw[0], raw[raw.length - 1]];
+              const lineH = fontSize * 1.15;
+              const topY  = nameOffY - (lines.length - 1) * lineH / 2;
+              lines.forEach((word, i) => {
+                const wEl = ns('text', {
+                  x: 0, y: topY + i * lineH,
+                  'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                  'font-size': fontSize, 'font-family': 'Georgia,serif',
+                  'font-weight': 'bold', fill: '#111'
+                });
+                wEl.textContent = word;
+                tg.appendChild(wEl);
+              });
+            }
+
+            if (doYear) {
+              const yearEl = ns('text', {
+                x: 0, y: nameOffY + fontSize * 1.15 * 1.4,
+                'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                'font-size': Math.round(fontSize * 0.85),
+                'font-family': 'Georgia,serif', fill: '#483216'
+              });
+              yearEl.textContent = ls;
+              tg.appendChild(yearEl);
+            }
+            svg.appendChild(tg);
+          }
+        }
+      }
+    }
+
+    for (let g = 1; g <= maxGen; g++) {
+      const r2 = CENTER_R + g * RING_W;
+      const labelA = START - 0.06;
+      const lx = cx + (r2 - RING_W * 0.22) * Math.cos(labelA);
+      const ly = cy + (r2 - RING_W * 0.22) * Math.sin(labelA);
+      const gl = ns('text', {
+        x: lx, y: ly,
+        'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-size': Math.min(10, RING_W * 0.28),
+        'font-family': 'Georgia,serif', fill: '#888', 'pointer-events': 'none'
+      });
+      gl.textContent = 'G' + (g + 1);
+      svg.appendChild(gl);
+    }
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+  window.navigate = function(id) {
+    focusId = id;
+    sessionStorage.setItem('portalFocusId', id);
+    draw();
+  };
+
+  // ── Start ────────────────────────────────────────────────────────────────
+  focusId = startId();
+  sessionStorage.setItem('portalFocusId', focusId);
+  draw();
+
+  // ── Zoom / Pan ────────────────────────────────────────────
+  const wrap  = document.getElementById('fan-wrap');
+  const svgEl = document.getElementById('fan-svg');
+  let pScale = 1, pDist0 = 0, pScale0 = 1;
+  let panX = 0, panY = 0, panX0 = 0, panY0 = 0;
+
+  function applyTransform() {
+    svgEl.style.transformOrigin = 'center center';
+    svgEl.style.transform = 'scale(' + pScale + ') translate(' + panX + 'px,' + panY + 'px)';
+  }
+
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    pScale = Math.min(6, Math.max(0.4, pScale * (e.deltaY > 0 ? 0.9 : 1.1)));
+    applyTransform();
+  }, { passive: false });
+
+  wrap.style.cursor = 'grab';
+  let isDragging = false, didDrag = false, dragX = 0, dragY = 0;
+  wrap.addEventListener('mousedown', e => {
+    isDragging = true; didDrag = false;
+    window._fanDragged = false;
+    dragX = e.clientX; dragY = e.clientY;
+    panX0 = panX; panY0 = panY;
+    wrap.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragX, dy = e.clientY - dragY;
+    if (!didDrag && Math.hypot(dx, dy) < 4) return;
+    didDrag = true;
+    window._fanDragged = true;
+    panX = panX0 + dx / pScale;
+    panY = panY0 + dy / pScale;
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; wrap.style.cursor = 'grab'; });
+
+  wrap.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      pDist0 = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      pScale0 = pScale; e.preventDefault();
+    }
+  }, { passive: false });
+  wrap.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      pScale = Math.min(6, Math.max(0.4, pScale0 * Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY) / pDist0));
+      applyTransform(); e.preventDefault();
+    }
+  }, { passive: false });
+
+  let tDragX = 0, tDragY = 0, tPanX0 = 0, tPanY0 = 0;
+  wrap.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) { tDragX = e.touches[0].clientX; tDragY = e.touches[0].clientY; tPanX0 = panX; tPanY0 = panY; }
+  }, { passive: true });
+  wrap.addEventListener('touchmove', e => {
+    if (e.touches.length === 1) {
+      panX = tPanX0 + (e.touches[0].clientX - tDragX) / pScale;
+      panY = tPanY0 + (e.touches[0].clientY - tDragY) / pScale;
+      applyTransform(); e.preventDefault();
+    }
+  }, { passive: false });
+
+})();
+
+  // ── Pan/zoom hint ──────────────────────────────────────────
+  (function() {
+    const hint = document.getElementById("pan-hint");
+    if (!hint) return;
+    const dismiss = () => hint.classList.add("hidden");
+    hint.addEventListener("click", dismiss);
+    setTimeout(dismiss, 5000);
+  })();
+</script>
+</body>
+</html>

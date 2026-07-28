@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kathy Tree — Index (Top Level)</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { margin:0; padding:0; }
+body { font-family:Georgia,serif; background:#f5f0e8; color:#222; }
+a { color:#5a3e1b; text-decoration:none; }
+a:hover { text-decoration:underline; }
+
+header { background:#3b2a1a; color:#f5f0e8; padding:1rem 1.5rem;
+         display:flex; align-items:center; justify-content:space-between;
+         font-family:Georgia, serif; }
+
+#controls { padding:10px 20px; display:flex; align-items:center;
+            gap:16px; flex-wrap:wrap; justify-content:center;
+            position:sticky; top:0; z-index:10; }
+#search-wrap { position:relative; flex:1; min-width:200px; max-width:340px; }
+#search { width:100%; padding:7px 10px; font-size:0.95rem;
+          border:1px solid #ccc; border-radius:4px; }
+#suggestions { position:absolute; top:100%; left:0; right:0; background:#fff;
+               border:1px solid #ccc; border-top:none; border-radius:0 0 4px 4px;
+               max-height:200px; overflow-y:auto; z-index:20; display:none; }
+.sug-item { padding:6px 10px; cursor:pointer; font-size:0.9rem; }
+.sug-item:hover { background:#f0e8d8; }
+#gens-label { font-size:1.15rem; white-space:nowrap; }
+#gens { padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:1.15rem; }
+
+#chart-wrap { padding:16px; min-height:400px; position:relative; padding-bottom:180px; text-align:center; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+svg { display:block; margin:0 auto; }
+.pbox { cursor:pointer; }
+.pbox rect { transition:filter 0.15s; }
+.pbox:hover rect { filter:brightness(0.93); }
+
+#spouse-panel { font-family:Georgia,serif; position:absolute; text-align:center; }
+#spouse-panel h3 { font-size:1.15rem; color:#3b2a1a; margin-bottom:6px; }
+
+@media (max-width:500px) {
+  #controls { padding:8px 10px; gap:8px; }
+  #search-wrap { min-width:120px; }
+  #gens-label { font-size:1rem; }
+  #gens { font-size:1rem; padding:4px 6px; }
+  #chart-wrap { padding:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+}
+header { position: sticky; top: 0; z-index: 20; }
+</style>
+</head>
+<body>
+
+<script src="header-p.js"></script>
+<script>
+(function() {
+  function positionStickyBar() {
+    var header = document.querySelector('header');
+    var bar = document.querySelector('#controls');
+    if (!header || !bar) return;
+    bar.style.top = header.offsetHeight + 'px';
+  }
+  positionStickyBar();
+  window.addEventListener('load', positionStickyBar);
+  window.addEventListener('resize', positionStickyBar);
+})();
+</script>
+
+<div id="controls">
+  <div id="search-wrap">
+    <input type="text" id="search" placeholder="Enter a name, or part of one..." autocomplete="off">
+    <div id="suggestions"></div>
+  </div>
+  <label id="gens-label">
+    <select id="gens">
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5" selected>5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+      <option value="8">8</option>
+      <option value="9">9</option>
+      <option value="10">10</option>
+    </select>
+    Generations
+  </label>
+</div>
+<div id="chart-wrap"><svg id="chart"></svg><div id="spouse-panel"></div></div>
+
+<script src="data.js"></script>
+<script>
+(function(){
+
+  const BOX_W = 192, H_GAP = 36, V_MIN = 8;
+  const FONT = 18, LINE = 21, YEAR_FONT = 13, PAD = 6;
+  const UNKNOWN_FONT = 11, UNKNOWN_BOX_H = UNKNOWN_FONT + PAD * 2;
+  let focusId = null;
+  let numGens  = 3;
+
+  // ── Data helpers ─────────────────────────────────────────────────────────
+  function indi(id) { return id ? TREE.individuals[id] : null; }
+  function fam(id)  { return id ? TREE.families[id]    : null; }
+
+  function fatherOf(id) {
+    const p = indi(id); if (!p || !p.famc) return null;
+    const f = fam(p.famc); return f ? f.husb : null;
+  }
+  function motherOf(id) {
+    const p = indi(id); if (!p || !p.famc) return null;
+    const f = fam(p.famc); return f ? f.wife : null;
+  }
+  function childrenOf(id) {
+    const p = indi(id); if (!p) return [];
+    const out = [];
+    (p.fams || []).forEach(fid => {
+      const f = fam(fid);
+      if (f) (f.chil || []).forEach(c => out.push(c));
+    });
+    return out;
+  }
+  function spousesOf(id) {
+    const p = indi(id); if (!p) return [];
+    const out = [];
+    (p.fams || []).forEach(fid => {
+      const f = fam(fid); if (!f) return;
+      if (f.husb && f.husb !== id) out.push(f.husb);
+      if (f.wife && f.wife !== id) out.push(f.wife);
+    });
+    return out;
+  }
+
+  function shortName(id) {
+    const p = indi(id); if (!p) return 'Unknown';
+    const parts = p.name.split(' ');
+    return parts.length <= 3 ? p.name : parts[0] + ' ' + parts[parts.length - 1];
+  }
+  function lifespan(id) {
+    const p = indi(id); if (!p) return '';
+    const b = p.byear, d = p.dyear;
+    if (b && d) return b + '–' + d;
+    if (b) return 'b.' + b;
+    if (d) return 'd.' + d;
+    return '';
+  }
+  function boxFill(id, isRoot) {
+    if (isRoot) return '#fef3d0';
+    const p = indi(id); if (!p) return '#e8e8e8';
+    return p.sex === 'M' ? '#d0c0a8' : p.sex === 'F' ? '#e4d5bb' : '#c8d8b8';
+  }
+
+  // ── SVG helpers ──────────────────────────────────────────────────────────
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs || {}).forEach(k => el.setAttribute(k, attrs[k]));
+    return el;
+  }
+  // Split a name into wrapped lines that fit inside BOX_W at the given font size
+  function nameLines(str, fontSize) {
+    const avgCharW = fontSize * 0.58;          // empirical for Georgia bold
+    const maxChars = Math.floor((BOX_W - 16) / avgCharW);
+    const words = str.split(' ');
+    const lines = [];
+    let cur = '';
+    words.forEach(w => {
+      const test = cur ? cur + ' ' + w : w;
+      if (test.length <= maxChars) { cur = test; }
+      else { if (cur) lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  // ── Draw one person box ──────────────────────────────────────────────────
+  function drawBox(svg, node, isRoot) {
+    const { id, x, y, boxH, lines } = node;
+    const g = svgEl('g', { class: 'pbox', transform: `translate(${x},${y})` });
+
+    g.appendChild(svgEl('rect', {
+      width: BOX_W, height: boxH, rx: 6, ry: 6,
+      fill:           id ? boxFill(id, isRoot) : '#e0e0e0',
+      stroke:         isRoot ? '#5a3e1b' : '#999',
+      'stroke-width': isRoot ? 2.5 : 1
+    }));
+
+    if (!id) {
+      const t = svgEl('text', {
+        x: BOX_W / 2, y: boxH / 2 + 4, 'text-anchor': 'middle',
+        'font-size': UNKNOWN_FONT, 'font-family': 'Georgia,serif', fill: '#aaa'
+      });
+      t.textContent = 'Unknown';
+      g.appendChild(t);
+      svg.appendChild(g);
+      return;
+    }
+
+    const byear = indi(id).byear;
+
+    // Centre the name block (year sits inline on the last line, not a separate row)
+    const startY = Math.round(boxH / 2 - (lines.length - 1) * LINE / 2 + FONT * 0.25);
+
+    const nameT = svgEl('text', {
+      x: BOX_W / 2, 'text-anchor': 'middle',
+      'font-size': FONT, 'font-family': 'Georgia,serif',
+      fill: '#1a0a00',
+      'font-weight': 'bold', cursor: 'pointer'
+    });
+    lines.forEach((line, i) => {
+      const isLast = i === lines.length - 1;
+      const ts = svgEl('tspan', { x: BOX_W / 2, dy: i === 0 ? startY : LINE });
+      ts.textContent = (isLast && byear) ? line + '  ' : line;
+      nameT.appendChild(ts);
+      if (isLast && byear) {
+        const ys = svgEl('tspan', {
+          'font-size': YEAR_FONT, 'font-weight': 'normal',
+          fill: isRoot ? '#5a3e1b' : '#483216'
+        });
+        ys.textContent = String(byear);
+        nameT.appendChild(ys);
+      }
+    });
+
+    // Wrap the name text in a link to that person's individual page.
+    // File path: html/I###.html relative to this file's location.
+    const nameLink = svgEl('a', { href: `html/${id}.html` });
+    nameLink.addEventListener('click', () => { sessionStorage.setItem('portalFocusId', id); });
+    nameLink.appendChild(nameT);
+    g.appendChild(nameLink);
+
+    g.addEventListener('click', e => {
+      if (e.target.closest('a')) return;
+      navigate(id);
+    });
+
+    svg.appendChild(g);
+  }
+
+  // ── Build ancestor tree (recursive; stops once a branch hits an unknown ancestor) ──
+  function buildTree(id, g, maxG) {
+    const node = { id, g };
+    if (id && g < maxG - 1) {
+      node.mother = buildTree(motherOf(id), g + 1, maxG);
+      node.father = buildTree(fatherOf(id), g + 1, maxG);
+    }
+    return node;
+  }
+
+  // Compute each node's actual box height from its name's line count
+  // (or a small fixed height for "Unknown" leaves) — no fixed global box height.
+  function computeBoxH(node) {
+    if (!node.id) {
+      node.lines = ['Unknown'];
+      node.boxH  = UNKNOWN_BOX_H;
+    } else {
+      const lines = nameLines(shortName(node.id), FONT);
+      node.lines = lines;
+      node.boxH  = Math.round((lines.length - 1) * LINE + FONT + PAD * 2);
+    }
+    if (node.mother) {
+      computeBoxH(node.mother);
+      computeBoxH(node.father);
+    }
+  }
+
+  // Assign x from generation, y by stacking leaves using each leaf's own boxH
+  // (post-order). Returns the next free y coordinate.
+  function assignPositions(node, ancestorX0, startY) {
+    node.x  = ancestorX0 + node.g * (BOX_W + H_GAP);
+    node.lx = node.x;
+    node.rx = node.x + BOX_W;
+    if (!node.mother) {
+      node.y  = startY;
+      node.cy = Math.round(startY + node.boxH / 2);
+      return startY + node.boxH + V_MIN * 2;
+    }
+    let y = assignPositions(node.mother, ancestorX0, startY);
+    y = assignPositions(node.father, ancestorX0, y);
+    node.cy = Math.round((node.mother.cy + node.father.cy) / 2);
+    node.y  = Math.round(node.cy - node.boxH / 2);
+    return y;
+  }
+
+  // ── Draw ─────────────────────────────────────────────────────────────────
+  function draw() {
+    if (!focusId) return;
+
+    const ancestorX0 = H_GAP;
+    const totalW     = ancestorX0 + numGens * (BOX_W + H_GAP) + H_GAP;
+
+    const root = buildTree(focusId, 0, numGens);
+    computeBoxH(root);
+    const totalH = assignPositions(root, ancestorX0, V_MIN);
+
+    const svg = document.getElementById('chart');
+    svg.setAttribute('width',  totalW);
+    svg.setAttribute('height', totalH);
+    svg.innerHTML = '';
+
+    // Ancestor connecting lines (behind boxes)
+    const aLines = svgEl('g', { stroke: '#bbb', 'stroke-width': '1.5', fill: 'none' });
+    (function drawLines(node) {
+      if (!node.mother) return;
+      const mo = node.mother, fa = node.father;
+      const mx = node.rx + H_GAP / 2;
+      aLines.appendChild(svgEl('path', { d:
+        `M${node.rx},${node.cy} H${mx} ` +
+        `M${mx},${mo.cy} H${mo.lx} ` +
+        `M${mx},${fa.cy} H${fa.lx} ` +
+        `M${mx},${mo.cy} V${fa.cy}`
+      }));
+      drawLines(mo);
+      drawLines(fa);
+    })(root);
+    svg.appendChild(aLines);
+
+    // Draw boxes — post-order so deeper ancestors are drawn first, root last (on top)
+    const drawOrder = [];
+    (function collect(node) {
+      if (node.mother) { collect(node.mother); collect(node.father); }
+      drawOrder.push(node);
+    })(root);
+    drawOrder.forEach(node => {
+      drawBox(svg, node, node === root);
+    });
+
+    // Position spouse panel below the root box
+    const CHART_PAD = 16;
+    const rootLeft   = CHART_PAD + root.x;
+    const rootBottom = CHART_PAD + root.y + root.boxH;
+    showSpouses(focusId, rootLeft, rootBottom, BOX_W);
+  }
+
+  // ── Spouses + Children panel ──────────────────────────────────────────────
+  function showSpouses(id, panelLeft, panelTop, panelW) {
+    const panel = document.getElementById('spouse-panel');
+    const sp   = spousesOf(id);
+    const kids = childrenOf(id);
+    if (!sp.length && !kids.length) { panel.innerHTML = ''; return; }
+
+    panel.style.left  = panelLeft + 'px';
+    panel.style.top   = (panelTop + 10) + 'px';
+    panel.style.width = panelW + 'px';
+
+    const linkStyle = 'display:block;background:#fff;border:1px solid #ddd;border-radius:4px;padding:4px 8px;font-size:1.15rem;color:#5a3e1b;word-break:break-word;overflow-wrap:break-word;white-space:normal';
+    const listStyle = 'display:flex;flex-direction:column;gap:5px;margin-top:5px';
+    let html = '';
+    if (kids.length) {
+      html += `<div style="${listStyle}">`;
+      kids.forEach(kid => {
+        const p = indi(kid);
+        if (p) html += `<a href="#" onclick="navigate('${kid}');return false;" style="${linkStyle}" title="${p.name}">${p.name}</a>`;
+      });
+      html += '</div>';
+    }
+    panel.innerHTML = html;
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+  window.navigate = function(id) {
+    focusId = id;
+    sessionStorage.setItem('portalFocusId', id);
+    draw();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ── Search / autocomplete ────────────────────────────────────────────────
+  const allPeople = Object.keys(TREE.individuals)
+    .map(id => ({ id, name: TREE.individuals[id].name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const searchEl = document.getElementById('search');
+  const sugBox   = document.getElementById('suggestions');
+
+  searchEl.addEventListener('input', function () {
+    const q = this.value.toLowerCase().trim();
+    sugBox.innerHTML = '';
+    if (!q) { sugBox.style.display = 'none'; return; }
+    const hits = allPeople.filter(p => p.name.toLowerCase().includes(q)).slice(0, 12);
+    if (!hits.length) { sugBox.style.display = 'none'; return; }
+    hits.forEach(p => {
+      const d = document.createElement('div');
+      d.className = 'sug-item';
+      d.textContent = p.name;
+      d.addEventListener('click', () => { sugBox.style.display = 'none'; navigate(p.id); });
+      sugBox.appendChild(d);
+    });
+    sugBox.style.display = 'block';
+  });
+
+  document.addEventListener('click', e => {
+    if (!searchEl.contains(e.target)) sugBox.style.display = 'none';
+  });
+
+  document.getElementById('gens').addEventListener('change', function () {
+    numGens = parseInt(this.value);
+    draw();
+  });
+
+  // ── Generation selector default (3-10 available on all screen sizes) ──────
+  (function () {
+    const sel = document.getElementById('gens');
+    numGens = 3;
+    sel.value = String(numGens);
+  })();
+
+  // ── Start ────────────────────────────────────────────────────────────────
+  function startId() {
+    const m = window.location.search.match(/[?&]id=([^&]+)/);
+    if (m && TREE.individuals[m[1]]) return m[1];
+    const saved = sessionStorage.getItem('portalFocusId');
+    if (saved && TREE.individuals[saved]) return saved;
+    return '252802692100';
+  }
+
+  focusId = startId();
+  sessionStorage.setItem('portalFocusId', focusId);
+  draw();
+
+})();
+</script>
+</body>
+</html>
