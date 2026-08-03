@@ -50,6 +50,7 @@
   }
   .thumbs figure img:hover { transform: scale(1.08); }
   .thumbs figcaption { font-size: 0.75rem; color: #555; margin-top: 4px; text-align: center; }
+  .thumbs figcaption.thumb-num { font-size: 0.6rem; color: #bbb; margin-top: 2px; text-align: center; }
   #lb {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95);
     z-index: 9999; overflow-y: auto; overflow-x: hidden;
@@ -94,12 +95,14 @@
 </div>
 
 <!-- ==================== LIGHTBOX START ==================== -->
-<div class="portrait-wrap"><img loading="lazy" src="../media/252802692011_1.webp"/></div><div class="thumbs">
+<div class="portrait-wrap"><img loading="lazy" src="../media/252802692011_1.webp" onerror="this.closest('.portrait-wrap').style.display='none'"/></div><div class="thumbs">
     <figure>
-      <img src="../media/252802692011_2.webp" loading="lazy">
+      <img src="../media/252802692011_2.webp" loading="lazy" onerror="this.closest('figure').style.display='none'">
+    <figcaption class="thumb-num">2</figcaption>
     </figure>
     <figure>
-      <img src="../media/252802692011_3.webp" loading="lazy">
+      <img src="../media/252802692011_3.webp" loading="lazy" onerror="this.closest('figure').style.display='none'">
+    <figcaption class="thumb-num">3</figcaption>
     </figure>
   </div></div>
 
